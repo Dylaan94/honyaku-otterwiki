@@ -47,7 +47,10 @@ def generate_doc(file_info: dict, model: str | None = None) -> str:
         Markdown string.
     """
     model = model or os.getenv("OPENAI_MODEL", "gpt-4o")
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    api_key = os.getenv("OPENAI_API_KEY", "")
+    if not api_key or api_key.startswith("sk-your"):
+        raise RuntimeError("OPENAI_API_KEY is not set. Add your real key to scripts/.env")
+    client = OpenAI(api_key=api_key)
 
     # Truncate very large files to stay within token limits
     content = file_info["content"]
@@ -55,7 +58,7 @@ def generate_doc(file_info: dict, model: str | None = None) -> str:
         content = content[:15000] + "\n\n// ... file truncated for length ..."
 
     user_prompt = f"""File: {file_info['relative_path']}
-Category: {file_info['subfolder']}
+Category: {file_info.get('category', file_info.get('subfolder', 'unknown'))}
 
 ```
 {content}

@@ -1,109 +1,66 @@
 # Honyaku OtterWiki
 
-Internal documentation wiki for Honyaku APIs and tasks, powered by [OtterWiki](https://otterwiki.com). Includes scripts to auto-generate documentation by scanning a code directory and using an AI model to produce markdown.
+Internal documentation wiki for Honyaku, powered by [OtterWiki](https://otterwiki.com). Includes scripts to auto-generate documentation by scanning the Xanoscript codebase and using an AI model to produce markdown.
 
 ## Architecture
 
 ```
 honyaku-otterwiki/
-├── docker-compose.yaml          # Runs OtterWiki (for Laravel Forge)
-├── wiki-content/                # Markdown docs (committed to git)
+├── docker-compose.yaml          # Runs OtterWiki (optional, for hosted wiki UI)
+├── wiki-content/                # Markdown docs (committed to GitHub)
 │   ├── Home.md                  # Wiki homepage
-│   ├── apis/                    # API endpoint documentation
-│   │   └── *.md
-│   └── tasks/                   # Task/job documentation
-│       └── *.md
+│   ├── apis/                    # API endpoint docs
+│   ├── functions/               # Xanoscript function docs
+│   ├── agents/                  # AI agent docs
+│   ├── mcp_servers/             # MCP server docs
+│   ├── middlewares/             # Middleware docs
+│   ├── tables/                  # Database table docs
+│   ├── tasks/                   # Scheduled task/job docs
+│   └── shunyaku/               # Team-contributed pages (manual)
 ├── scripts/                     # Doc generation scripts (run locally)
 │   ├── run.py                   # Main entry point
-│   ├── scanner.py               # Reads files from target directory
+│   ├── scanner.py               # Reads files from Xano project
 │   ├── generator.py             # Sends code to AI, gets markdown back
 │   ├── requirements.txt         # Python dependencies
 │   ├── .env.example             # Environment variable template
 │   └── .env                     # Your local config (git-ignored)
-└── app-data/                    # OtterWiki runtime data (git-ignored)
+└── app-data/                    # OtterWiki runtime data (git-ignored, local only)
 ```
 
 ### How it works
 
-1. **OtterWiki** runs in Docker and serves the wiki UI. It stores pages as markdown in a git repo. No external database needed — it uses SQLite internally for user accounts.
-2. **`wiki-content/`** is where all the markdown documentation lives. This is committed to GitHub.
-3. **`scripts/`** scan a target code directory, compare against existing docs in `wiki-content/`, and use OpenAI to generate markdown for anything new.
+1. **`wiki-content/`** is the source of truth for all documentation. It's committed to GitHub and readable there directly.
+2. **`scripts/`** scan the Xanoscript project (`xano-scripts/honyakuOS`), compare against existing docs, and use OpenAI to generate markdown for anything new.
+3. **OtterWiki** (optional) can be run in Docker if you want a browsable wiki UI. It reads from its own git repo at `app-data/repository/` which the scripts sync into.
+
+### Workflow: local scripts → GitHub → (optional) hosted wiki
+
+```
+You run scripts locally          GitHub                    Forge (optional)
+┌─────────────────────┐    ┌──────────────┐    ┌──────────────────────┐
+│ 1. Scan Xano project│    │              │    │                      │
+│ 2. Generate markdown │───>│ wiki-content/ │───>│ OtterWiki serves     │
+│ 3. Commit & push     │    │ on GitHub    │    │ pages from git repo  │
+└─────────────────────┘    └──────────────┘    └──────────────────────┘
+```
+
+- **Without Forge**: Docs are readable directly on GitHub as markdown files.
+- **With Forge**: OtterWiki gives you a searchable wiki UI. See "Hosting on Forge" section below.
 
 ---
 
 ## Prerequisites
 
-- **Docker** and **Docker Compose** (for running OtterWiki)
-- **Python 3.10+** (for running the doc generation scripts locally)
+- **Python 3.10+** (for running the doc generation scripts)
 - **An OpenAI API key** (for AI-generated documentation)
-- **Git** (the wiki content is version-controlled)
+- **Git** (wiki content is version-controlled)
+- **Docker** (only needed if running OtterWiki locally or on a server)
 
 ---
 
-## 1. Setup OtterWiki on Laravel Forge
+## 1. Setup Doc Generation Scripts
 
-### Does it need a database?
-
-**No.** OtterWiki uses an embedded SQLite database for user accounts and settings. The actual wiki content is stored as markdown files in a git repository. There is no need to provision MySQL, Postgres, or any external database.
-
-### Deploy steps
-
-1. **Create a new server on Forge** (or use an existing one). A small server is fine — OtterWiki needs minimal CPU/RAM (~100MB).
-
-2. **SSH into the server** and clone this repo:
-   ```bash
-   cd /home/forge
-   git clone https://github.com/YOUR_ORG/honyaku-otterwiki.git
-   cd honyaku-otterwiki
-   ```
-
-3. **Start OtterWiki with Docker Compose:**
-   ```bash
-   docker compose up -d
-   ```
-   This starts OtterWiki on port `8080`.
-
-4. **Set up a reverse proxy in Forge.** Create a new site (e.g. `wiki.yourdomain.com`) and configure Nginx to proxy to port 8080. Add this to the Nginx config for the site:
-
-   ```nginx
-   location / {
-       proxy_set_header Host $http_host;
-       proxy_set_header X-Real-IP $remote_addr;
-       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-       proxy_set_header X-Forwarded-Host $http_host;
-       proxy_set_header X-Forwarded-Proto $scheme;
-       proxy_pass http://127.0.0.1:8080;
-       client_max_body_size 64M;
-   }
-   ```
-
-5. **Enable SSL** via Forge's Let's Encrypt integration.
-
-6. **Open the wiki** at `https://wiki.yourdomain.com`. Register the first account — this becomes the admin account (no email confirmation needed for the first user).
-
-7. **Configure the wiki** in the admin settings (site name, description, permissions, etc.).
-
-### Environment variables (optional)
-
-You can customise OtterWiki by adding environment variables to `docker-compose.yaml`:
-
-```yaml
-environment:
-  SITE_NAME: "Honyaku Wiki"
-  SITE_DESCRIPTION: "API & Task Documentation"
-```
-
-See [OtterWiki Configuration](https://otterwiki.com/Configuration) for all options.
-
-### Keeping it running
-
-Forge can manage the Docker process as a daemon. Or simply rely on `restart: unless-stopped` in the compose file — Docker will restart it after server reboots.
-
----
-
-## 2. Setup Doc Generation Scripts (Local)
-
-These scripts run on your local machine to scan a code directory and generate wiki pages.
+These scripts run on your local machine. They scan the Xanoscript project and generate wiki pages for anything new.
 
 ### Install
 
@@ -123,10 +80,7 @@ cp .env.example .env
 Edit `scripts/.env`:
 
 ```env
-# Required: your OpenAI API key
 OPENAI_API_KEY=sk-your-key-here
-
-# Optional: change the model (default: gpt-4o)
 OPENAI_MODEL=gpt-4o
 ```
 
@@ -135,71 +89,123 @@ OPENAI_MODEL=gpt-4o
 From the project root:
 
 ```bash
-# Scan a directory and generate docs for new files
-python scripts/run.py --target /path/to/your/code/directory
+# Dry run — see what files need docs without generating anything
+python scripts/run.py --target ../xano-scripts/honyakuOS --dry-run
 
-# Dry run — see what would be generated without doing it
-python scripts/run.py --target /path/to/your/code/directory --dry-run
+# Generate docs for all new files
+python scripts/run.py --target ../xano-scripts/honyakuOS
 
-# Generate docs but skip git commit/push
-python scripts/run.py --target /path/to/your/code/directory --no-git
+# Generate but skip git commit/push
+python scripts/run.py --target ../xano-scripts/honyakuOS --no-git
 
-# Only scan files with specific extensions
-python scripts/run.py --target /path/to/your/code/directory --extensions .query .task
+# Only scan specific folders
+python scripts/run.py --target ../xano-scripts/honyakuOS --folders apis tasks
+
+# Skip syncing to local OtterWiki
+python scripts/run.py --target ../xano-scripts/honyakuOS --no-sync
 ```
 
 ### What the script does
 
-1. **Scans** every file in `--target` directory (recursively).
-2. **Classifies** each file as an API or task based on folder names and content.
-3. **Compares** against existing `.md` files in `wiki-content/apis/` and `wiki-content/tasks/`.
-4. **Generates** markdown documentation for any new files by sending the source code to an OpenAI model.
-5. **Writes** the markdown to `wiki-content/apis/` or `wiki-content/tasks/`.
-6. **Commits and pushes** the new docs to git (unless `--no-git` is passed).
-
-### File classification
-
-The script determines whether a file is an API or task by:
-- **Folder name**: if the file is inside a folder containing "api", "endpoint", or "route" it goes to `apis/`. If it contains "task", "command", or "job" it goes to `tasks/`.
-- **Content**: if the first line contains `query` with `verb=` it's classified as an API.
-- **Default**: files that can't be classified go to `apis/`.
+1. **Scans** the Xanoscript project folders: `apis/`, `functions/`, `agents/`, `mcp_servers/`, `middlewares/`, `tables/`, `tasks/`.
+2. **Compares** against existing `.md` files in `wiki-content/`. Only files without a matching doc are flagged as new.
+3. **Generates** markdown documentation for new files by sending the source code to OpenAI.
+4. **Writes** the markdown to the matching folder in `wiki-content/`.
+5. **Syncs** to local OtterWiki (if running) so pages appear immediately.
+6. **Commits and pushes** to GitHub (unless `--no-git`).
 
 ### Idempotency
 
-The script only generates docs for files that don't already have a corresponding `.md` file in `wiki-content/`. It matches by filename (slug). So running it multiple times is safe — it won't regenerate existing docs.
+Running the script multiple times is safe. It only generates docs for files that don't already have a `.md` in `wiki-content/`. Existing docs are never overwritten.
 
-To regenerate a doc, delete the `.md` file from `wiki-content/` and run again.
+To regenerate a doc: delete its `.md` file from `wiki-content/` and run again.
+
+### Shunyaku pages
+
+The `wiki-content/shunyaku/` folder is for manually written pages. The scripts never touch this folder. Anyone can add `.md` files here, commit, and push.
 
 ---
 
-## 3. Uploading to OtterWiki
+## 2. Hosting on Forge (Optional)
 
-The generated markdown in `wiki-content/` is committed to this git repo. To get it into the running OtterWiki instance:
+If you want a browsable wiki UI instead of just reading markdown on GitHub.
 
-**Option A: Manual upload** — Copy/paste the markdown content into the OtterWiki web editor.
+### Does it need a database?
 
-**Option B: Git sync** — OtterWiki's data store is a git repo at `app-data/repository/`. You could set up a script or webhook to copy `wiki-content/` files into that repo. [TODO: automate this if needed]
+**No.** OtterWiki uses SQLite (file-based) for user accounts. Wiki content is stored as markdown in a git repo. No MySQL or Postgres needed.
+
+### Deploy steps
+
+1. **Create a server on Forge** (or use an existing one). Minimal resources needed (~100MB RAM).
+
+2. **Install Docker** on the server if not already present.
+
+3. **Clone and start:**
+   ```bash
+   cd /home/forge
+   git clone git@github.com:Dylaan94/honyaku-otterwiki.git
+   cd honyaku-otterwiki
+   docker compose up -d
+   ```
+
+4. **Set up Nginx reverse proxy** in Forge. Create a site (e.g. `wiki.honyaku.org`) with this config:
+
+   ```nginx
+   location / {
+       proxy_set_header Host $http_host;
+       proxy_set_header X-Real-IP $remote_addr;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-Host $http_host;
+       proxy_set_header X-Forwarded-Proto $scheme;
+       proxy_pass http://127.0.0.1:8080;
+       client_max_body_size 64M;
+   }
+   ```
+
+5. **Enable SSL** via Forge's Let's Encrypt.
+
+6. **Register** the first account — it becomes the admin automatically.
+
+### Syncing GitHub docs to OtterWiki on the server
+
+After you push new docs to GitHub, SSH into the server and run:
+
+```bash
+cd /home/forge/honyaku-otterwiki
+git pull
+# Copy updated wiki-content into OtterWiki's repo
+cp -r wiki-content/apis wiki-content/functions wiki-content/agents \
+      wiki-content/mcp_servers wiki-content/middlewares wiki-content/tables \
+      wiki-content/tasks wiki-content/shunyaku app-data/repository/
+cp wiki-content/Home.md app-data/repository/home.md
+cd app-data/repository
+git add -A && git commit -m "sync from GitHub"
+```
+
+Or automate this with a Forge deployment script that runs on each push.
 
 ---
 
 ## Useful Commands
 
 ```bash
-# Start OtterWiki
+# Dry run (see what needs docs)
+python scripts/run.py --target ../xano-scripts/honyakuOS --dry-run
+
+# Generate all new docs
+python scripts/run.py --target ../xano-scripts/honyakuOS
+
+# Generate only API docs
+python scripts/run.py --target ../xano-scripts/honyakuOS --folders apis
+
+# Start local OtterWiki
 docker compose up -d
 
-# Stop OtterWiki
+# Stop local OtterWiki
 docker compose down
 
 # View OtterWiki logs
 docker compose logs -f otterwiki
-
-# Restart after config changes
-docker compose restart
-
-# Generate docs (from project root, with venv activated)
-python scripts/run.py --target /path/to/code --dry-run
-python scripts/run.py --target /path/to/code
 ```
 
 ---
@@ -208,8 +214,8 @@ python scripts/run.py --target /path/to/code
 
 | Issue | Solution |
 |-------|----------|
-| Port 8080 already in use | Change the port mapping in `docker-compose.yaml` (e.g. `9090:80`) |
-| OpenAI API errors | Check your `OPENAI_API_KEY` in `scripts/.env` |
-| No files found when scanning | Check that `--target` points to the right directory and `--extensions` matches your file types |
-| Git push fails | Make sure you have push access to the remote and the repo is initialised |
-# honyaku-otterwiki
+| Port 8080 already in use | Change the port in `docker-compose.yaml` (e.g. `9090:80`) |
+| OpenAI API errors | Check `OPENAI_API_KEY` in `scripts/.env` |
+| No files found | Check `--target` path points to the Xanoscript project root |
+| Docs not showing in OtterWiki | Run with `--no-sync` disabled, or manually copy to `app-data/repository/` |
+| Git push fails | Check you have push access to the GitHub repo |
