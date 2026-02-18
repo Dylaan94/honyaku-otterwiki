@@ -21,5 +21,10 @@ docker cp wiki-content/apis "$CONTAINER:/app-data/repository/"
 [ -d wiki-content/tasks ] && docker cp wiki-content/tasks "$CONTAINER:/app-data/repository/"
 [ -d wiki-content/shunyaku ] && docker cp wiki-content/shunyaku "$CONTAINER:/app-data/repository/"
 
-# Commit inside container
-docker exec "$CONTAINER" sh -c 'cd /app-data/repository && git add -A && git diff --cached --quiet || git commit -m "sync from GitHub"'
+# Commit inside container (fix safe.directory + ensure git identity for fresh containers)
+docker exec "$CONTAINER" sh -c '
+  git config --global --add safe.directory /app-data/repository
+  git config --global user.email "deploy@wiki" 2>/dev/null || true
+  git config --global user.name "Deploy" 2>/dev/null || true
+  cd /app-data/repository && git add -A && git diff --cached --quiet || git commit -m "sync from GitHub"
+'
