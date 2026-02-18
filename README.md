@@ -168,21 +168,16 @@ If you want a browsable wiki UI instead of just reading markdown on GitHub.
 
 ### Syncing GitHub docs to OtterWiki on the server
 
-After you push new docs to GitHub, SSH into the server and run:
+After you push new docs to GitHub, run the sync script on the server (avoids permission errors):
 
 ```bash
-cd /home/forge/honyaku-otterwiki
+cd /home/forge/honyaku-otterwiki  # or your deploy path
 git pull
-# Copy updated wiki-content into OtterWiki's repo
-cp -r wiki-content/apis wiki-content/functions wiki-content/agents \
-      wiki-content/mcp_servers wiki-content/middlewares wiki-content/tables \
-      wiki-content/tasks wiki-content/shunyaku app-data/repository/
-cp wiki-content/Home.md app-data/repository/home.md
-cd app-data/repository
-git add -A && git commit -m "sync from GitHub"
+docker compose up -d
+./deploy-sync.sh
 ```
 
-Or automate this with a Forge deployment script that runs on each push.
+For Forge auto-deploy, add `./deploy-sync.sh` to your deployment script **after** `docker compose up -d`. The script uses `docker cp` and `docker exec` so it doesn't need write access to `app-data/` on the host.
 
 ---
 
