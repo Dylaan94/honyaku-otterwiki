@@ -9,12 +9,9 @@ services:
     environment:
       SITE_NAME: "Honyaku Wiki"
       SITE_DESCRIPTION: "API & Task Documentation Wiki"
-      # Permissions: READ, WRITE, ATTACHMENT, UPLOAD
-      # Options: ANONYMOUS, REGISTERED, APPROVED, ADMIN
-      READ_ACCESS: "REGISTERED"
-      WRITE_ACCESS: "REGISTERED"
-      ATTACHMENT_ACCESS: "REGISTERED"
-      # Registration settings
-      AUTO_APPROVAL: "False"
-      EMAIL_NEEDS_CONFIRMATION: "True"
-      NOTIFY_ADMINS_ON_REGISTER: "True"
+      READ_ACCESS: "ANONYMOUS"
+      WRITE_ACCESS: "ANONYMOUS"
+      ATTACHMENT_ACCESS: "ANONYMOUS"
+      UPLOAD_ACCESS: "ANONYMOUS"
+      EMAIL_NEEDS_CONFIRMATION: "False"
+      AUTO_APPROVAL: "True"
